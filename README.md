@@ -148,10 +148,6 @@ ct_denoising/
 
 ---
 
-## Paper Reference Title
-
-> *Adaptive Multi-Scale Edge-Aware Thresholding for Structure-Preserving CT Image Denoising in the Shearlet/Wavelet Domain*
-
-### Suggested Abstract Framing
+### Abstract
 
 This work proposes an adaptive, multi-scale thresholding framework for transform-domain CT image denoising. Unlike fixed-threshold methods, our approach computes per-pixel threshold maps using: (1) Gaussian-weighted local variance estimation, (2) multi-scale edge detection combining Sobel and Laplacian-of-Gaussian responses on a pre-smoothed reference, and (3) texture-region classification that applies differential threshold multipliers to homogeneous, textured, and edge pixel regions. Firm (semi-soft) thresholding is employed to avoid the constant shrinkage bias of soft thresholding. Experiments on synthetic CT phantoms under Poisson and mixed Poisson-Gaussian noise demonstrate that the proposed method achieves superior structural fidelity (SSIM) compared to fixed-threshold wavelet denoising and competitive performance against spatial domain baselines, while maintaining the directional selectivity advantages of transform-domain processing.
