@@ -31,8 +31,8 @@ _DISPLAY_NAMES = {
     "wavelet_firm": "Wavelet (Fixed T)",
     "shearlet_fixed": "Shearlet (Fixed T)",
     "shearlet_firm": "Shearlet (Fixed T)",
-    "adaptive_wavelet": "Adaptive Wavelet ★",
-    "adaptive_shearlet": "Adaptive Shearlet ★",
+    "adaptive_wavelet": "Adaptive Wavelet",
+    "adaptive_shearlet": "Adaptive Shearlet",
 }
 
 

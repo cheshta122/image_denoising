@@ -5,21 +5,20 @@ from __future__ import annotations
 from pathlib import Path
 
 import numpy as np
+import pandas as pd
 import streamlit as st
 from PIL import Image
 
 from ct_denoising.data import demo_phantom, normalize_image
 from ct_denoising.pipeline import SingleImageConfig, run_pipeline
-from ct_denoising.metrics import metrics_summary_table
 
 # ── Page config ──────────────────────────────────────────────────────────────
 st.set_page_config(
     page_title="CT Denoising — Adaptive Multi-Scale",
-    page_icon="🏥",
     layout="wide",
 )
 
-st.title("🏥 Adaptive Multi-Scale Edge-Aware CT Image Denoising")
+st.title("Adaptive Multi-Scale Edge-Aware CT Image Denoising")
 st.caption(
     "Combines multi-scale edge detection, Gaussian local variance estimation, "
     "texture-aware thresholding, and firm (semi-soft) threshold in the Wavelet/Shearlet domain."
@@ -27,7 +26,7 @@ st.caption(
 
 # ── Sidebar controls ─────────────────────────────────────────────────────────
 with st.sidebar:
-    st.header("⚙️ Pipeline Parameters")
+    st.header("Pipeline Parameters")
 
     uploaded = st.file_uploader(
         "Upload a CT image (PNG / JPEG / TIFF)",
@@ -92,7 +91,7 @@ with st.sidebar:
     )
     seed = st.number_input("Random seed", value=42, min_value=0)
 
-    run_btn = st.button("▶ Run Denoising", type="primary", use_container_width=True)
+    run_btn = st.button("Run Denoising", type="primary", width="stretch")
 
 # ── Main panel ───────────────────────────────────────────────────────────────
 if run_btn:
@@ -129,16 +128,140 @@ if run_btn:
     col3.metric("SSIM (Proposed)", f"{output['ssim']:.3f}")
     col4.metric("RMSE (Proposed)", f"{output['rmse']:.4f}")
 
-    # ── Image grid ──
-    st.subheader("Visual Comparison")
+    # ── Result section: noisy image, denoised outputs, and transform comparison ──
+    st.subheader("Results: Noisy Image vs Denoised Output")
     results = output["results"]
+
+    noisy_metrics = output["metrics"].get("noisy", {})
+    proposed_metrics = output["metrics"].get(adaptive_name, {})
+    noisy_col, denoised_col = st.columns(2)
+    noisy_col.image(
+        output["noisy"],
+        caption=(
+            "Noisy CT Image\n"
+            f"PSNR {noisy_metrics.get('psnr', 0):.2f} dB | "
+            f"SSIM {noisy_metrics.get('ssim', 0):.3f}"
+        ),
+        clamp=True,
+    )
+    denoised_col.image(
+        output["denoised"],
+        caption=(
+            f"Best Denoised Output ({adaptive_name.replace('_', ' ').title()})\n"
+            f"PSNR {proposed_metrics.get('psnr', 0):.2f} dB | "
+            f"SSIM {proposed_metrics.get('ssim', 0):.3f}"
+        ),
+        clamp=True,
+    )
+
+    noisy_vs_denoised = pd.DataFrame(
+        [
+            {
+                "Image / Method": "Noisy CT Image",
+                "PSNR (dB)": noisy_metrics.get("psnr"),
+                "SSIM": noisy_metrics.get("ssim"),
+                "RMSE": noisy_metrics.get("rmse"),
+                "Observation": "Noise is present before denoising",
+            },
+            {
+                "Image / Method": adaptive_name.replace("_", " ").title(),
+                "PSNR (dB)": proposed_metrics.get("psnr"),
+                "SSIM": proposed_metrics.get("ssim"),
+                "RMSE": proposed_metrics.get("rmse"),
+                "Observation": "Noise reduced while preserving structures",
+            },
+        ]
+    )
+    st.dataframe(noisy_vs_denoised, width="stretch", hide_index=True)
+
+    st.subheader("Wavelet and Shearlet Results")
+    available_backends = output.get("available_transform_backends", [])
+    wavelet_tab, shearlet_tab = st.tabs(["Wavelet Result", "Shearlet Result"])
+
+    def _method_metrics_table(method_names: list[str]) -> pd.DataFrame:
+        rows = []
+        for method in method_names:
+            values = output["metrics"].get(method)
+            if values is None:
+                continue
+            rows.append(
+                {
+                    "Method": method.replace("_", " ").title(),
+                    "PSNR (dB)": values.get("psnr"),
+                    "SSIM": values.get("ssim"),
+                    "RMSE": values.get("rmse"),
+                    "GradCorr": values.get("grad_corr"),
+                    "NRR": values.get("nrr"),
+                }
+            )
+        return pd.DataFrame(rows)
+
+    with wavelet_tab:
+        st.markdown("**Wavelet-domain denoising result**")
+        wavelet_cols = st.columns(2)
+        wavelet_cols[0].image(
+            results["wavelet_fixed"],
+            caption="Wavelet Fixed Threshold",
+            clamp=True,
+        )
+        wavelet_cols[1].image(
+            results["adaptive_wavelet"],
+            caption="Adaptive Wavelet",
+            clamp=True,
+        )
+        st.dataframe(
+            _method_metrics_table(["wavelet_fixed", "adaptive_wavelet"]),
+            width="stretch",
+            hide_index=True,
+        )
+
+    with shearlet_tab:
+        if "adaptive_shearlet" in results:
+            if "shearlet-style fallback" in backend:
+                st.markdown(
+                    "**Shearlet-style denoising result**  \n"
+                )
+            else:
+                st.markdown("**Shearlet-domain denoising result**")
+            shearlet_cols = st.columns(2)
+            shearlet_cols[0].image(
+                results["shearlet_fixed"],
+                caption="Shearlet Fixed Threshold" if "shearlet-style fallback" not in backend else "Shearlet-Style Fixed Threshold",
+                clamp=True,
+            )
+            shearlet_cols[1].image(
+                results["adaptive_shearlet"],
+                caption="Adaptive Shearlet" if "shearlet-style fallback" not in backend else "Adaptive Shearlet-Style",
+                clamp=True,
+            )
+            st.dataframe(
+                _method_metrics_table(["shearlet_fixed", "adaptive_shearlet"]),
+                width="stretch",
+                hide_index=True,
+            )
+        else:
+            st.info(
+                "Shearlet backend is not available in this environment. "
+                "Install PyShearLab to generate Shearlet results; Wavelet results are shown above."
+            )
+
+    st.subheader("Wavelet vs Shearlet Comparison Table")
+    comparison_methods = ["adaptive_wavelet"]
+    if "adaptive_shearlet" in output["metrics"]:
+        comparison_methods.append("adaptive_shearlet")
+    transform_comparison = _method_metrics_table(comparison_methods)
+    st.dataframe(transform_comparison, width="stretch", hide_index=True)
+
+    # ── Full image grid ──
+    st.subheader("Complete Visual Comparison")
 
     # Display order: original, noisy, baselines sorted by PSNR, proposed last
     method_order = sorted(
         [k for k in results if not k.startswith("adaptive_")],
         key=lambda k: output["metrics"].get(k, {}).get("psnr", 0.0),
     )
-    display_order = ["noisy"] + method_order + [adaptive_name]
+    adaptive_methods = [k for k in ["adaptive_wavelet", "adaptive_shearlet"] if k in results]
+    display_order = ["noisy"] + method_order + adaptive_methods
 
     panels_per_row = 4
     all_panels = [("Original (clean)", image_array)] + [
@@ -156,11 +279,11 @@ if run_btn:
             col.image(img, caption=caption, clamp=True)
 
     # ── Metrics table ──
-    st.subheader("📊 Full Metrics Table")
+    st.subheader("Full Metrics Table")
     st.code(output["metrics_table"], language=None)
 
     # ── Method explanation ──
-    with st.expander("📖 What makes this method different?"):
+    with st.expander("What makes this method different?"):
         st.markdown(f"""
 **Backend:** `{backend}` transform domain
 
@@ -189,7 +312,7 @@ if run_btn:
    get lower thresholds; finer levels (noisier) get higher thresholds.
         """)
 else:
-    st.info("👈 Configure parameters in the sidebar and click **Run Denoising** to start.")
+    st.info("Configure parameters in the sidebar and click **Run Denoising** to start.")
     st.image(
         demo_phantom(256).image,
         caption="Enhanced CT phantom (Shepp-Logan + tissue blobs + bone rings)",

@@ -15,6 +15,8 @@ Key improvements over the original:
 from __future__ import annotations
 
 from dataclasses import dataclass
+from pathlib import Path
+import sys
 from typing import Any
 
 import numpy as np
@@ -192,9 +194,15 @@ class TransformDenoiser:
             threshold_map = float(np.clip(blended, 0.005, 0.30))
 
         filtered_coeffs = coeffs.copy()
+        threshold_values = threshold_map if isinstance(threshold_map, np.ndarray) else threshold_map
+        if isinstance(threshold_values, np.ndarray):
+            threshold_values = np.broadcast_to(
+                threshold_values,
+                filtered_coeffs[..., 1:].shape,
+            )
         filtered_coeffs[..., 1:] = apply_threshold(
             filtered_coeffs[..., 1:],
-            threshold_map[..., 1:] if isinstance(threshold_map, np.ndarray) else threshold_map,
+            threshold_values,
             threshold_mode,
         )
         reconstructed = shearlab.SLshearrec2D(filtered_coeffs, system)
@@ -211,7 +219,14 @@ class TransformDenoiser:
             import pyshearlab  # type: ignore
             return pyshearlab
         except Exception:
-            return None
+            vendor_path = Path(__file__).resolve().parents[1] / "vendor" / "pyshearlab"
+            if vendor_path.exists() and str(vendor_path) not in sys.path:
+                sys.path.insert(0, str(vendor_path))
+            try:
+                import pyshearlab  # type: ignore
+                return pyshearlab
+            except Exception:
+                return None
 
 
 def _match_shape(image: np.ndarray, shape: tuple[int, int]) -> np.ndarray:
