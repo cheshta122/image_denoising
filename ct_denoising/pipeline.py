@@ -221,22 +221,35 @@ def _denoise_arrays(
     if config.prefer_shearlet:
         shearlet_denoiser = TransformDenoiser(prefer_shearlet=True)
         if shearlet_denoiser.backend_name == "shearlet":
-            shearlet_fixed = shearlet_denoiser.denoise(
-                noisy,
-                threshold=config.threshold,
-                threshold_mode=config.threshold_mode,
-                adaptive=False,
-            )
-            shearlet_adaptive = shearlet_denoiser.denoise(
-                noisy,
-                threshold=config.threshold,
-                threshold_mode=config.threshold_mode,
-                adaptive=True,
-                adaptive_config=adaptive_config,
-            )
-            results["shearlet_fixed"] = shearlet_fixed.image
-            results["adaptive_shearlet"] = shearlet_adaptive.image
-            backends.append("shearlet")
+            try:
+                shearlet_fixed = shearlet_denoiser.denoise(
+                    noisy,
+                    threshold=config.threshold,
+                    threshold_mode=config.threshold_mode,
+                    adaptive=False,
+                )
+                shearlet_adaptive = shearlet_denoiser.denoise(
+                    noisy,
+                    threshold=config.threshold,
+                    threshold_mode=config.threshold_mode,
+                    adaptive=True,
+                    adaptive_config=adaptive_config,
+                )
+                results["shearlet_fixed"] = shearlet_fixed.image
+                results["adaptive_shearlet"] = shearlet_adaptive.image
+                backends.append("shearlet")
+            except Exception:
+                results["shearlet_fixed"] = _directional_shearlet_style_fallback(
+                    noisy,
+                    strength=float(config.threshold),
+                    adaptive=False,
+                )
+                results["adaptive_shearlet"] = _directional_shearlet_style_fallback(
+                    noisy,
+                    strength=float(config.threshold),
+                    adaptive=True,
+                )
+                backends.append("shearlet-style fallback")
         else:
             results["shearlet_fixed"] = _directional_shearlet_style_fallback(
                 noisy,
